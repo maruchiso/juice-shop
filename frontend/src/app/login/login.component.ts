@@ -129,8 +129,13 @@ export class LoginComponent implements OnInit {
       localStorage.removeItem('email')
     }
   }
+  generateState () {
+    return crypto.getRandomValues(new Uint32Array(4)).join('')
+  }
 
   googleLogin () {
-    this.windowRefService.nativeWindow.location.replace(`${oauthProviderUrl}?client_id=${this.clientId}&response_type=token&scope=email&redirect_uri=${this.redirectUri}`)
+    const state = this.generateState()
+    sessionStorage.setItem('oauthState', state)
+    this.windowRefService.nativeWindow.location.replace(`${oauthProviderUrl}?client_id=${this.clientId}&response_type=token&scope=email&redirect_uri=${this.redirectUri}&state=${state}`)
   }
 }
