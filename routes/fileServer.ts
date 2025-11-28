@@ -24,6 +24,9 @@ export function servePublicFiles () {
   }
 
   function verify (file: string, res: Response, next: NextFunction) {
+    if (file.includes('%00') || file.includes('\x00')) {
+      return res.status(400).send('Null byte poisoning detected!')
+    }
     if (file && (endsWithAllowlistedFileType(file) || (file === 'incident-support.kdbx'))) {
       file = security.cutOffPoisonNullByte(file)
 
