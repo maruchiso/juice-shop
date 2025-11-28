@@ -14,6 +14,11 @@ import * as models from '../models/index'
 import { type User } from '../data/types'
 import * as utils from '../lib/utils'
 
+// 5 attempts per minute
+const loginAttempts: Record<string, { count: number, lastTry: number }> = {}
+const LIMIT = 5           
+const BLOCK_TIME = 60000
+
 // vuln-code-snippet start loginAdminChallenge loginBenderChallenge loginJimChallenge
 export function login () {
   function afterLogin (user: { data: User, bid: number }, res: Response, next: NextFunction) {
@@ -30,8 +35,28 @@ export function login () {
   }
 
   return (req: Request, res: Response, next: NextFunction) => {
+    const ip = req.ip ?? 'unknown'
+    const now = Date.now()
+    const entry = loginAttempts[ip] || { count: 0, lastTry: 0 }
+    if (now - entry.lastTry > BLOCK_TIME) {
+      entry.count = 0
+    }
+    if (entry.count >= LIMIT && (now - entry.lastTry) < BLOCK_TIME) {
+      return res.status(429).send('Too many login attempts. Please try again later.')
+    }
+    else {
+    entry.count++
+    entry.lastTry = now
+    loginAttempts[ip] = entry
+    }
     verifyPreLoginChallenges(req) // vuln-code-snippet hide-line
-    models.sequelize.query(`SELECT * FROM Users WHERE email = '${req.body.email || ''}' AND password = '${security.hash(req.body.password || '')}' AND deletedAt IS NULL`, { model: UserModel, plain: true }) // vuln-code-snippet vuln-line loginAdminChallenge loginBenderChallenge loginJimChallenge
+    UserModel.findOne({
+      where: {
+        email: req.body.email || '',
+        password: security.hash(req.body.password || '')
+      }
+    })
+ // vuln-code-snippet vuln-line loginAdminChallenge loginBenderChallenge loginJimChallenge
       .then((authenticatedUser) => { // vuln-code-snippet neutral-line loginAdminChallenge loginBenderChallenge loginJimChallenge
         const user = utils.queryResultToJson(authenticatedUser)
         if (user.data?.id && user.data.totpSecret !== '') {
@@ -45,6 +70,7 @@ export function login () {
             }
           })
         } else if (user.data?.id) {
+          loginAttempts[ip] = { count: 0, lastTry: Date.now() }
           // @ts-expect-error FIXME some properties missing in user - vuln-code-snippet hide-line
           afterLogin(user, res, next)
         } else {
